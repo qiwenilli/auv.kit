@@ -50,14 +50,15 @@ func init() {
 }
 
 type server struct {
-	addr string
-	mux  *http.ServeMux
+	addr       string
+	mux        *http.ServeMux
+	HttpServer *http.Server
 }
 
 func NewServer() *server {
 	onceServer.Do(func() {
 		if flag.Parsed() {
-			log.Fatal("flag parse() to doing ")
+			log.Fatal("dont need exec : flag parse()")
 		}
 		flag.Parse()
 		if FlagHelp {
@@ -72,7 +73,9 @@ func NewServer() *server {
 		}
 
 		//
-		serverEntity = &server{}
+		serverEntity = &server{
+			HttpServer: &http.Server{},
+		}
 	})
 	return serverEntity
 }
@@ -87,15 +90,22 @@ func (s *server) WithService(srvs ...TwirpServer) *server {
 		////
 		typ := reflect.TypeOf(srv)
 		for i := 0; i < typ.NumMethod(); i++ {
-			log.Println(srv.PathPrefix(), typ.Method(i).Name, typ.Method(i).Type)
+			methodName := typ.Method(i).Name
+			switch methodName {
+			case "PathPrefix", "ProtocGenTwirpVersion", "ServeHTTP", "ServiceDescriptor":
+				continue
+			}
+			log.Debugf("%s%s", srv.PathPrefix(), typ.Method(i).Name)
 		}
 	}
 	s.mux = mux
+	s.HttpServer.Handler = mux
+	s.buildServer()
 	//
 	return s
 }
 
-func (s *server) Run() {
+func (s *server) buildServer() {
 	pprofService(s.mux)
 	if FlagServerAddr != "" {
 		if addrSlice := strings.Split(FlagServerAddr, ":"); len(addrSlice) == 2 && addrSlice[0] == "" {
@@ -106,9 +116,17 @@ func (s *server) Run() {
 	} else {
 		s.addr = fmt.Sprintf("%s:8080", utils.LocalIP())
 	}
-	log.Info("listen: http://", s.addr)
-	//
-	http.ListenAndServe(s.addr, s.mux)
+	s.HttpServer.Addr = s.addr
+}
+
+func (s *server) Run() {
+
+	err := s.HttpServer.ListenAndServe()
+	if err != nil {
+		log.Error(err)
+	} else {
+		log.Info("listen: http://", s.addr)
+	}
 }
 
 func pprofService(mux *http.ServeMux) {
