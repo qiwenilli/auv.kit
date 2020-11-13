@@ -7,8 +7,10 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/keepeye/logrus-filename"
 	"github.com/qiwenilli/auv.kit/utils"
@@ -44,15 +46,17 @@ func init() {
 	log.AddHook(filenameHook)
 	//
 	flag.BoolVar(&FlagHelp, "h", false, "")
-	flag.StringVar(&FlagServerAddr, "server.addr", "", "http listen")
+	flag.StringVar(&FlagServerAddr, "server.addr", "", "http listen (default: 8080)")
 	flag.BoolVar(&FlagPprofEnable, "pprof.enable", false, "")
 	flag.StringVar(&FlagDebugLevel, "log.level", "debug", "trace | debug | info | warn | error | fatal | panic")
 }
 
 type server struct {
-	addr       string
-	mux        *http.ServeMux
-	HttpServer *http.Server
+	name        string
+	addr        string
+	mux         *http.ServeMux
+	HttpServer  *http.Server
+	dieHookFunc func()
 }
 
 func NewServer() *server {
@@ -80,6 +84,11 @@ func NewServer() *server {
 	return serverEntity
 }
 
+func (s *server) WithName(name string) *server {
+	s.name = name
+	return s
+}
+
 func (s *server) WithService(srvs ...TwirpServer) *server {
 	mux := http.NewServeMux()
 	for _, srv := range srvs {
@@ -105,6 +114,11 @@ func (s *server) WithService(srvs ...TwirpServer) *server {
 	return s
 }
 
+func (s *server) WithDieHookFun(hook func()) *server {
+	s.dieHookFunc = hook
+	return s
+}
+
 func (s *server) buildServer() {
 	pprofService(s.mux)
 	if FlagServerAddr != "" {
@@ -119,12 +133,26 @@ func (s *server) buildServer() {
 	s.HttpServer.Addr = s.addr
 }
 
+func (s *server) signal() {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGPWR)
+	go func() {
+		fmt.Println("exit signal", <-c)
+		signal.Stop(c)
+		if s.dieHookFunc != nil {
+			s.dieHookFunc()
+		}
+		os.Exit(0)
+	}()
+}
+
 func (s *server) Run() {
 
 	err := s.HttpServer.ListenAndServe()
 	if err != nil {
 		log.Error(err)
 	} else {
+		s.signal()
 		log.Info("listen: http://", s.addr)
 	}
 }
@@ -145,4 +173,8 @@ func pprofService(mux *http.ServeMux) {
 	mux.Handle("/debug/pprof/heap", pprof.Handler("heap"))
 	mux.Handle("/debug/pprof/threadcreate", pprof.Handler("threadcreate"))
 	mux.Handle("/debug/pprof/block", pprof.Handler("block"))
+}
+
+func swagger() {
+
 }
