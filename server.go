@@ -4,19 +4,29 @@ import (
 	// "context"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/pprof"
 	"os"
 	"os/signal"
+	"reflect"
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/keepeye/logrus-filename"
-	"github.com/qiwenilli/auv.kit/utils"
 	log "github.com/sirupsen/logrus"
-	"reflect"
 	// "github.com/twitchtv/twirp"
+	"github.com/gorilla/mux"
+
+	apachelog "github.com/lestrrat-go/apache-logformat"
+	rotatelogs "github.com/lestrrat-go/file-rotatelogs"
+
+	"github.com/qiwenilli/auv.kit/internal"
+	auvconfig "github.com/qiwenilli/auv.kit/internal/config"
+	auvhttp "github.com/qiwenilli/auv.kit/internal/http"
+	"github.com/qiwenilli/auv.kit/utils"
 )
 
 type TwirpServer interface {
@@ -27,36 +37,18 @@ type TwirpServer interface {
 }
 
 var (
-	FlagHelp        bool
-	FlagServerAddr  string
-	FlagPprofEnable bool
-	FlagDebugLevel  string
-	//
 	onceServer   sync.Once
 	serverEntity *server
 )
 
-const ()
-
-func init() {
-
-	log.SetOutput(os.Stdout)
-	filenameHook := filename.NewHook()
-	filenameHook.Field = "f"
-	log.AddHook(filenameHook)
-	//
-	flag.BoolVar(&FlagHelp, "h", false, "")
-	flag.StringVar(&FlagServerAddr, "server.addr", "", "http listen (default: 8080)")
-	flag.BoolVar(&FlagPprofEnable, "pprof.enable", false, "")
-	flag.StringVar(&FlagDebugLevel, "log.level", "debug", "trace | debug | info | warn | error | fatal | panic")
-}
-
 type server struct {
-	name        string
 	addr        string
-	mux         *http.ServeMux
-	HttpServer  *http.Server
+	pathRules   []string
+	mux         *mux.Router
+	handler     http.Handler
 	dieHookFunc func()
+
+	HttpServer *http.Server
 }
 
 func NewServer() *server {
@@ -65,12 +57,12 @@ func NewServer() *server {
 			log.Fatal("dont need exec : flag parse()")
 		}
 		flag.Parse()
-		if FlagHelp {
+		if auvconfig.FlagHelp {
 			flag.Usage()
 			os.Exit(0)
 		}
 		//
-		if logLevel, err := log.ParseLevel(FlagDebugLevel); err != nil {
+		if logLevel, err := log.ParseLevel(auvconfig.FlagDebugLevel); err != nil {
 			log.Fatal(err)
 		} else {
 			log.SetLevel(logLevel)
@@ -78,25 +70,53 @@ func NewServer() *server {
 
 		//
 		serverEntity = &server{
-			HttpServer: &http.Server{},
+			HttpServer: &http.Server{
+				WriteTimeout: 15 * time.Second,
+				ReadTimeout:  15 * time.Second,
+			},
+			mux: mux.NewRouter(),
 		}
 	})
 	return serverEntity
 }
 
-func (s *server) WithName(name string) *server {
-	s.name = name
-	return s
+func (s *server) Run(opts ...Opt) {
+
+	serverOpt := &Option{}
+	for _, optFunc := range opts {
+		optFunc(serverOpt)
+	}
+	log.Info(serverOpt)
+	//
+	s.mux = mux.NewRouter()
+	if auvconfig.FlagPprofEnable {
+		s.withPprof()
+	}
+	s.withService(serverOpt.Services...)
+	s.withSignal(serverOpt.DieHookFunc)
+	if auvconfig.FlagAllowCrossDomain {
+		s.mux.Use(auvhttp.MiddlewareForCrossDomain)
+	}
+	if auvconfig.FlagAccessLogEnable {
+		s.withAccessLog(serverOpt.ServiceName)
+		s.HttpServer.Handler = s.handler
+	} else {
+		s.HttpServer.Handler = s.mux
+	}
+	s.withAddr()
+	err := s.HttpServer.ListenAndServe()
+	if err != nil {
+		log.Error(err)
+	}
 }
 
-func (s *server) WithService(srvs ...TwirpServer) *server {
-	mux := http.NewServeMux()
+func (s *server) withService(srvs ...TwirpServer) *server {
 	for _, srv := range srvs {
 		if srv == nil {
 			continue
 		}
-		mux.Handle(srv.PathPrefix(), srv)
-		////
+		s.WithHandle(srv.PathPrefix(), srv)
+		//
 		typ := reflect.TypeOf(srv)
 		for i := 0; i < typ.NumMethod(); i++ {
 			methodName := typ.Method(i).Name
@@ -104,77 +124,93 @@ func (s *server) WithService(srvs ...TwirpServer) *server {
 			case "PathPrefix", "ProtocGenTwirpVersion", "ServeHTTP", "ServiceDescriptor":
 				continue
 			}
-			log.Debugf("%s%s", srv.PathPrefix(), typ.Method(i).Name)
+			log.Infof("%s%s", srv.PathPrefix(), typ.Method(i).Name)
 		}
 	}
-	s.mux = mux
-	s.HttpServer.Handler = mux
-	s.buildServer()
-	//
 	return s
 }
 
-func (s *server) WithDieHookFun(hook func()) *server {
-	s.dieHookFunc = hook
-	return s
-}
-
-func (s *server) buildServer() {
-	pprofService(s.mux)
-	if FlagServerAddr != "" {
-		if addrSlice := strings.Split(FlagServerAddr, ":"); len(addrSlice) == 2 && addrSlice[0] == "" {
-			s.addr = fmt.Sprintf("%s%s", utils.LocalIP(), FlagServerAddr)
-		} else {
-			s.addr = fmt.Sprintf("%s", FlagServerAddr)
-		}
+func (s *server) withAddr() {
+	if addrSlice := strings.Split(auvconfig.FlagServerAddr, ":"); len(addrSlice) == 2 && addrSlice[0] == "" {
+		s.addr = fmt.Sprintf("%s%s", utils.LocalIP(), auvconfig.FlagServerAddr)
 	} else {
-		s.addr = fmt.Sprintf("%s:8080", utils.LocalIP())
+		s.addr = fmt.Sprintf("%s", auvconfig.FlagServerAddr)
 	}
 	s.HttpServer.Addr = s.addr
+	log.Info("listen: http://", s.addr)
 }
 
-func (s *server) signal() {
+func (s *server) withSignal(dieHookFunc func()) {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGPWR)
 	go func() {
-		fmt.Println("exit signal", <-c)
-		signal.Stop(c)
-		if s.dieHookFunc != nil {
-			s.dieHookFunc()
+		switch <-c {
+		case os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGPWR:
+			log.Info("exit program...")
+			signal.Stop(c)
+			if dieHookFunc != nil {
+				dieHookFunc()
+			}
+			os.Exit(0)
 		}
-		os.Exit(0)
 	}()
 }
 
-func (s *server) Run() {
+func (s *server) withAccessLog(serviceName string) {
 
-	err := s.HttpServer.ListenAndServe()
-	if err != nil {
-		log.Error(err)
-	} else {
-		s.signal()
-		log.Info("listen: http://", s.addr)
+	createRotatelogs := func(log_prefix string) *rotatelogs.RotateLogs {
+		log_f := fmt.Sprintf("%s_%s", log_prefix, serviceName)
+		rl, err := rotatelogs.New(
+			log_f+".%Y%m%d%H%M",
+			rotatelogs.WithLinkName(log_f),
+			rotatelogs.WithMaxAge(24*time.Hour),
+			rotatelogs.WithRotationTime(time.Hour),
+		)
+		if err != nil {
+			log.Fatalf("failed to create rotatelogs: %s", err)
+		}
+		return rl
 	}
+
+	access_log := createRotatelogs("access_log")
+	s.handler = apachelog.CombinedLog.Wrap(s.mux, access_log)
+
+	//
+	work_log := createRotatelogs("work_log")
+	stdout := io.MultiWriter(os.Stdout, work_log)
+	log.SetOutput(stdout)
+	log.SetFormatter(new(internal.LogFormatter))
+	// add filename to log
+	filenameHook := filename.NewHook()
+	filenameHook.Field = "f"
+	log.AddHook(filenameHook)
 }
 
-func pprofService(mux *http.ServeMux) {
-	if !FlagPprofEnable {
-		return
-	}
-	log.Info("pprof enable")
-	log.Info("router: ", "/debug/pprof/")
-	mux.HandleFunc("/debug/pprof/", pprof.Index)
-	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+func (s *server) withPprof() {
+	s.WithHandleFunc("/debug/pprof/", pprof.Index)
+	s.WithHandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	s.WithHandleFunc("/debug/pprof/profile", pprof.Profile)
+	s.WithHandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	s.WithHandleFunc("/debug/pprof/trace", pprof.Trace)
 
-	mux.Handle("/debug/pprof/goroutine", pprof.Handler("goroutine"))
-	mux.Handle("/debug/pprof/heap", pprof.Handler("heap"))
-	mux.Handle("/debug/pprof/threadcreate", pprof.Handler("threadcreate"))
-	mux.Handle("/debug/pprof/block", pprof.Handler("block"))
+	s.WithHandle("/debug/pprof/goroutine", pprof.Handler("goroutine"))
+	s.WithHandle("/debug/pprof/heap", pprof.Handler("heap"))
+	s.WithHandle("/debug/pprof/threadcreate", pprof.Handler("threadcreate"))
+	s.WithHandle("/debug/pprof/block", pprof.Handler("block"))
 }
 
 func swagger() {
 
+}
+
+func (s *server) WithHandle(path string, handler http.Handler) *server {
+	s.pathRules = append(s.pathRules, path)
+	s.mux.Handle(path, handler)
+	return s
+}
+
+func (s *server) WithHandleFunc(path string, f func(http.ResponseWriter, *http.Request)) *server {
+	s.pathRules = append(s.pathRules, path)
+	s.mux.HandleFunc(path, f)
+	return s
 }
