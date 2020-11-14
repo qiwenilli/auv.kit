@@ -66,7 +66,6 @@ func NewServer() *server {
 			log.SetLevel(logLevel)
 		}
 
-		//
 		serverEntity = &server{
 			HttpServer: &http.Server{
 				WriteTimeout: 15 * time.Second,
@@ -85,7 +84,6 @@ func (s *server) Run(opts ...Opt) {
 		optFunc(serverOpt)
 	}
 	s.withWorkLog(serverOpt.ServiceName)
-	s.mux = mux.NewRouter()
 	if auvconfig.FlagPprofEnable {
 		s.withPprof()
 	}
@@ -95,13 +93,16 @@ func (s *server) Run(opts ...Opt) {
 	s.withService(serverOpt.Services...)
 	s.withSignal(serverOpt.DieHookFunc)
 	if auvconfig.FlagAllowCrossDomain {
-		s.mux.Use(auvhttp.MiddlewareForCrossDomain)
+		serverOpt.Middlewares = append(serverOpt.Middlewares, auvhttp.MiddlewareForCrossDomain)
 	}
+	s.mux.Use(serverOpt.Middlewares...)
+
 	s.withAccessLog(serverOpt.ServiceName)
 	s.HttpServer.Handler = s.handler
 	for _, path := range s.pathRules {
 		log.Info(path)
 	}
+
 	s.withAddr()
 	err := s.HttpServer.ListenAndServe()
 	if err != nil {

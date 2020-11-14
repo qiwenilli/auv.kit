@@ -1,8 +1,8 @@
 package auv
 
 import (
+	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
-	"github.com/twitchtv/twirp"
 
 	"regexp"
 )
@@ -10,10 +10,10 @@ import (
 var Options []Opt
 
 type Option struct {
-	ServiceName  string
-	Services     []TwirpServer
-	Interceptors []twirp.Interceptor
-	DieHookFunc  func()
+	ServiceName string
+	Services    []TwirpServer
+	Middlewares []mux.MiddlewareFunc
+	DieHookFunc func()
 }
 
 type Opt func(*Option) error
@@ -29,12 +29,6 @@ func WithServiceName(val string) Opt {
 	}
 }
 
-// func WithHostName(val string) Opt {
-// 	return func(opt *Option) error {
-// 		return nil
-// 	}
-// }
-
 func WithServices(srv TwirpServer) Opt {
 	return func(opt *Option) error {
 		opt.Services = append(opt.Services, srv)
@@ -42,16 +36,16 @@ func WithServices(srv TwirpServer) Opt {
 	}
 }
 
-func WithInterceptors(interceptor twirp.Interceptor) Opt {
+func WithDieHookFunc(_func func()) Opt {
 	return func(opt *Option) error {
-		opt.Interceptors = append(opt.Interceptors, interceptor)
+		opt.DieHookFunc = _func
 		return nil
 	}
 }
 
-func WithDieHookFunc(_func func()) Opt {
+func WithMiddlewares(middlewareFunc mux.MiddlewareFunc) Opt {
 	return func(opt *Option) error {
-		opt.DieHookFunc = _func
+		opt.Middlewares = append(opt.Middlewares, middlewareFunc)
 		return nil
 	}
 }
