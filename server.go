@@ -1,7 +1,6 @@
 package auv
 
 import (
-	// "context"
 	"flag"
 	"fmt"
 	"io"
@@ -21,7 +20,6 @@ import (
 	"github.com/gorilla/mux"
 
 	apachelog "github.com/lestrrat-go/apache-logformat"
-	rotatelogs "github.com/lestrrat-go/file-rotatelogs"
 
 	"github.com/qiwenilli/auv.kit/internal"
 	auvconfig "github.com/qiwenilli/auv.kit/internal/config"
@@ -86,22 +84,23 @@ func (s *server) Run(opts ...Opt) {
 	for _, optFunc := range opts {
 		optFunc(serverOpt)
 	}
-	log.Info(serverOpt)
-	//
+	s.withWorkLog(serverOpt.ServiceName)
 	s.mux = mux.NewRouter()
 	if auvconfig.FlagPprofEnable {
 		s.withPprof()
+	}
+	if auvconfig.FlagSwaggerUiEnable {
+		s.withSwaggerUi()
 	}
 	s.withService(serverOpt.Services...)
 	s.withSignal(serverOpt.DieHookFunc)
 	if auvconfig.FlagAllowCrossDomain {
 		s.mux.Use(auvhttp.MiddlewareForCrossDomain)
 	}
-	if auvconfig.FlagAccessLogEnable {
-		s.withAccessLog(serverOpt.ServiceName)
-		s.HttpServer.Handler = s.handler
-	} else {
-		s.HttpServer.Handler = s.mux
+	s.withAccessLog(serverOpt.ServiceName)
+	s.HttpServer.Handler = s.handler
+	for _, path := range s.pathRules {
+		log.Info(path)
 	}
 	s.withAddr()
 	err := s.HttpServer.ListenAndServe()
@@ -124,7 +123,7 @@ func (s *server) withService(srvs ...TwirpServer) *server {
 			case "PathPrefix", "ProtocGenTwirpVersion", "ServeHTTP", "ServiceDescriptor":
 				continue
 			}
-			log.Infof("%s%s", srv.PathPrefix(), typ.Method(i).Name)
+			s.pathRules = append(s.pathRules, fmt.Sprintf("%s%s", srv.PathPrefix(), typ.Method(i).Name))
 		}
 	}
 	return s
@@ -157,26 +156,16 @@ func (s *server) withSignal(dieHookFunc func()) {
 }
 
 func (s *server) withAccessLog(serviceName string) {
-
-	createRotatelogs := func(log_prefix string) *rotatelogs.RotateLogs {
-		log_f := fmt.Sprintf("%s_%s", log_prefix, serviceName)
-		rl, err := rotatelogs.New(
-			log_f+".%Y%m%d%H%M",
-			rotatelogs.WithLinkName(log_f),
-			rotatelogs.WithMaxAge(24*time.Hour),
-			rotatelogs.WithRotationTime(time.Hour),
-		)
-		if err != nil {
-			log.Fatalf("failed to create rotatelogs: %s", err)
-		}
-		return rl
+	if auvconfig.FlagAccessLogEnable {
+		access_log := utils.CreateRotatelogs("access_log", serviceName, auvconfig.FlagLogPath)
+		s.handler = apachelog.CombinedLog.Wrap(s.mux, access_log)
+	} else {
+		s.handler = s.mux
 	}
+}
 
-	access_log := createRotatelogs("access_log")
-	s.handler = apachelog.CombinedLog.Wrap(s.mux, access_log)
-
-	//
-	work_log := createRotatelogs("work_log")
+func (s *server) withWorkLog(serviceName string) {
+	work_log := utils.CreateRotatelogs("work_log", serviceName, auvconfig.FlagLogPath)
 	stdout := io.MultiWriter(os.Stdout, work_log)
 	log.SetOutput(stdout)
 	log.SetFormatter(new(internal.LogFormatter))
@@ -199,8 +188,14 @@ func (s *server) withPprof() {
 	s.WithHandle("/debug/pprof/block", pprof.Handler("block"))
 }
 
-func swagger() {
+func (s *server) withSwaggerUi() {
+	uiHandle := func(resp http.ResponseWriter, req *http.Request) {
+		resp.WriteHeader(200)
 
+		html, _ := utils.FlateDecode(internal.SwggerHtml)
+		resp.Write(html)
+	}
+	s.WithHandleFunc("/swagger", uiHandle)
 }
 
 func (s *server) WithHandle(path string, handler http.Handler) *server {
