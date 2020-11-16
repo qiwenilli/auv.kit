@@ -29,9 +29,9 @@ func WithServiceName(val string) Opt {
 	}
 }
 
-func WithServices(srv TwirpServer) Opt {
+func WithServices(srvs ...TwirpServer) Opt {
 	return func(opt *Option) error {
-		opt.Services = append(opt.Services, srv)
+		opt.Services = append(opt.Services, srvs...)
 		return nil
 	}
 }
@@ -43,9 +43,9 @@ func WithDieHookFunc(_func func()) Opt {
 	}
 }
 
-func WithMiddlewares(middlewareFunc mux.MiddlewareFunc) Opt {
+func WithMiddlewares(middlewareFuncs ...mux.MiddlewareFunc) Opt {
 	return func(opt *Option) error {
-		opt.Middlewares = append(opt.Middlewares, middlewareFunc)
+		opt.Middlewares = append(opt.Middlewares, middlewareFuncs...)
 		return nil
 	}
 }

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/pprof"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"reflect"
@@ -13,14 +13,17 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	// "unsafe"
 
 	"github.com/keepeye/logrus-filename"
 	log "github.com/sirupsen/logrus"
 	// "github.com/twitchtv/twirp"
+	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 
 	apachelog "github.com/lestrrat-go/apache-logformat"
 
+	_ "github.com/mkevac/debugcharts"
 	"github.com/qiwenilli/auv.kit/internal"
 	auvconfig "github.com/qiwenilli/auv.kit/internal/config"
 	auvhttp "github.com/qiwenilli/auv.kit/internal/http"
@@ -92,13 +95,19 @@ func (s *server) Run(opts ...Opt) {
 	}
 	s.withService(serverOpt.Services...)
 	s.withSignal(serverOpt.DieHookFunc)
+
+	//
+	var middlewares []mux.MiddlewareFunc
+	middlewares = append(middlewares, auvhttp.MiddlewareTraceId)
 	if auvconfig.FlagAllowCrossDomain {
-		serverOpt.Middlewares = append(serverOpt.Middlewares, auvhttp.MiddlewareForCrossDomain)
+		middlewares = append(middlewares, auvhttp.MiddlewareForCrossDomain)
 	}
-	s.mux.Use(serverOpt.Middlewares...)
+	middlewares = append(middlewares, serverOpt.Middlewares...)
+	s.mux.Use(middlewares...)
 
 	s.withAccessLog(serverOpt.ServiceName)
 	s.HttpServer.Handler = s.handler
+
 	for _, path := range s.pathRules {
 		log.Info(path)
 	}
@@ -172,21 +181,22 @@ func (s *server) withWorkLog(serviceName string) {
 	log.SetFormatter(new(internal.LogFormatter))
 	// add filename to log
 	filenameHook := filename.NewHook()
-	filenameHook.Field = "f"
 	log.AddHook(filenameHook)
+	// add serviceName hook
+	serviceNameHook := &internal.ServiceNameHook{ServiceName: serviceName}
+	log.AddHook(serviceNameHook)
 }
 
 func (s *server) withPprof() {
-	s.WithHandleFunc("/debug/pprof/", pprof.Index)
-	s.WithHandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	s.WithHandleFunc("/debug/pprof/profile", pprof.Profile)
-	s.WithHandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	s.WithHandleFunc("/debug/pprof/trace", pprof.Trace)
+	debugRouter := s.mux.PathPrefix("/debug/")
+	debugRouter.Handler(handlers.CompressHandler(http.DefaultServeMux))
 
-	s.WithHandle("/debug/pprof/goroutine", pprof.Handler("goroutine"))
-	s.WithHandle("/debug/pprof/heap", pprof.Handler("heap"))
-	s.WithHandle("/debug/pprof/threadcreate", pprof.Handler("threadcreate"))
-	s.WithHandle("/debug/pprof/block", pprof.Handler("block"))
+	vv := reflect.ValueOf(http.DefaultServeMux).Elem().FieldByName("m")
+	if vv.Kind() == reflect.Map {
+		for _, element := range vv.MapKeys() {
+			log.Info(element)
+		}
+	}
 }
 
 func (s *server) withSwaggerUi() {
