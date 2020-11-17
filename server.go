@@ -18,12 +18,11 @@ import (
 	"github.com/keepeye/logrus-filename"
 	log "github.com/sirupsen/logrus"
 	// "github.com/twitchtv/twirp"
-	"github.com/gorilla/handlers"
+	"github.com/arl/statsviz"
+	// "github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
-
-	apachelog "github.com/lestrrat-go/apache-logformat"
-
 	_ "github.com/mkevac/debugcharts"
+
 	"github.com/qiwenilli/auv.kit/internal"
 	auvconfig "github.com/qiwenilli/auv.kit/internal/config"
 	auvhttp "github.com/qiwenilli/auv.kit/internal/http"
@@ -76,6 +75,7 @@ func NewServer() *server {
 			},
 			mux: mux.NewRouter(),
 		}
+
 	})
 	return serverEntity
 }
@@ -105,9 +105,13 @@ func (s *server) Run(opts ...Opt) {
 	middlewares = append(middlewares, serverOpt.Middlewares...)
 	s.mux.Use(middlewares...)
 
-	s.withAccessLog(serverOpt.ServiceName)
-	s.HttpServer.Handler = s.handler
+	// s.withAccessLog(serverOpt.ServiceName)
 
+	// use gzip
+	// handlers.CompressHandler(http.DefaultServeMux)
+
+	s.handler = s.mux
+	s.HttpServer.Handler = s.handler
 	for _, path := range s.pathRules {
 		log.Info(path)
 	}
@@ -165,15 +169,6 @@ func (s *server) withSignal(dieHookFunc func()) {
 	}()
 }
 
-func (s *server) withAccessLog(serviceName string) {
-	if auvconfig.FlagAccessLogEnable {
-		access_log := utils.CreateRotatelogs("access_log", serviceName, auvconfig.FlagLogPath)
-		s.handler = apachelog.CombinedLog.Wrap(s.mux, access_log)
-	} else {
-		s.handler = s.mux
-	}
-}
-
 func (s *server) withWorkLog(serviceName string) {
 	work_log := utils.CreateRotatelogs("work_log", serviceName, auvconfig.FlagLogPath)
 	stdout := io.MultiWriter(os.Stdout, work_log)
@@ -188,8 +183,11 @@ func (s *server) withWorkLog(serviceName string) {
 }
 
 func (s *server) withPprof() {
+	s.WithHandle("/debug/statsviz/", statsviz.Index)
+	s.WithHandleFunc("/debug/statsviz/ws", statsviz.Ws)
+
 	debugRouter := s.mux.PathPrefix("/debug/")
-	debugRouter.Handler(handlers.CompressHandler(http.DefaultServeMux))
+	debugRouter.Handler(http.DefaultServeMux)
 
 	vv := reflect.ValueOf(http.DefaultServeMux).Elem().FieldByName("m")
 	if vv.Kind() == reflect.Map {
