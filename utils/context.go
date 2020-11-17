@@ -8,10 +8,10 @@ import (
 	auvhttp "github.com/qiwenilli/auv.kit/internal/http"
 )
 
-func TraceIdForContext(ctx context.Context) string {
+func traceIdForContext(ctx context.Context) string {
 	return fmt.Sprintf("%s", ctx.Value(auvhttp.TraceIdName))
 }
 
 func TraceId(r *http.Request) string {
-	return TraceIdForContext(r.Context())
+	return traceIdForContext(r.Context())
 }
