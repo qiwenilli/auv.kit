@@ -98,14 +98,16 @@ func (s *server) Run(opts ...Opt) {
 
 	//
 	var middlewares []mux.MiddlewareFunc
+	middlewares = append(middlewares, auvhttp.MiddlewareResponseTime)
 	middlewares = append(middlewares, auvhttp.MiddlewareTraceId)
+	ratelimit := auvhttp.NewMiddlewareRlimit(2)
+	ratelimit.SetIpWhiteList([]string{"192.168.*.*"})
+	middlewares = append(middlewares, ratelimit.MiddlewareRlimit)
 	if auvconfig.FlagAllowCrossDomain {
 		middlewares = append(middlewares, auvhttp.MiddlewareForCrossDomain)
 	}
 	middlewares = append(middlewares, serverOpt.Middlewares...)
 	s.mux.Use(middlewares...)
-
-	// s.withAccessLog(serverOpt.ServiceName)
 
 	// use gzip
 	// handlers.CompressHandler(http.DefaultServeMux)
@@ -155,10 +157,12 @@ func (s *server) withAddr() {
 
 func (s *server) withSignal(dieHookFunc func()) {
 	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGPWR)
+	// signal.Notify(c, os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGPWR)
+	signal.Notify(c, os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGQUIT)
 	go func() {
 		switch <-c {
-		case os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGPWR:
+		// case os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGPWR:
+		case os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGQUIT:
 			log.Info("exit program...")
 			signal.Stop(c)
 			if dieHookFunc != nil {
@@ -176,6 +180,7 @@ func (s *server) withWorkLog(serviceName string) {
 	log.SetFormatter(new(internal.LogFormatter))
 	// add filename to log
 	filenameHook := filename.NewHook()
+	filenameHook.Field = "f"
 	log.AddHook(filenameHook)
 	// add serviceName hook
 	serviceNameHook := &internal.ServiceNameHook{ServiceName: serviceName}

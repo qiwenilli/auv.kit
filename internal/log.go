@@ -32,6 +32,6 @@ func (s *ServiceNameHook) Levels() []log.Level {
 }
 
 func (s *ServiceNameHook) Fire(entry *log.Entry) error {
-	entry.Data["serviceName"] = s.ServiceName
+	entry.Data["SN"] = s.ServiceName
 	return nil
 }
