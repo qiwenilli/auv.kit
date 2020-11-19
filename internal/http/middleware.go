@@ -26,10 +26,19 @@ func MiddlewareResponseTime(h http.Handler) http.Handler {
 
 func MiddlewareForCrossDomain(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Add("Access-Control-Allow-Origin", "*")
+
+		log.Debug(r.Header["Origin"])
+		if origin, ok := r.Header["Origin"]; ok {
+			referer_host := origin[0]
+
+			w.Header().Add("Access-Control-Allow-Origin", referer_host)
+			w.Header().Add("Very", "Origin")
+		} else {
+			w.Header().Add("Access-Control-Allow-Origin", "*")
+		}
 		w.Header().Add("Access-Control-Allow-Credentials", "true")
 		w.Header().Add("Access-Control-Allow-Headers", "X-Auv-Cors")
-		w.Header().Add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE")
+		w.Header().Add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		//
 		h.ServeHTTP(w, r)
 	})
@@ -83,7 +92,7 @@ func (l *limiter) SetIpWhiteList(ips []string) {
 		ip = `^` + ip
 		l.ipWhiteList = append(l.ipWhiteList, ip)
 	}
-	log.Debug(l.ipWhiteList)
+	log.Infof("ip white list <%v> match rule <%v>", ips, l.ipWhiteList)
 }
 
 func (l *limiter) SetWaitTimeout(t time.Duration) {

@@ -17,5 +17,6 @@ require (
 	github.com/sirupsen/logrus v1.7.0
 	github.com/tcnksm/go-httpstat v0.2.0
 	github.com/tebeka/strftime v0.1.5 // indirect
+	github.com/twitchtv/twirp v7.1.0+incompatible // indirect
 	github.com/ulule/limiter/v3 v3.7.1
 )
