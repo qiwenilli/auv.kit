@@ -15,6 +15,9 @@ var (
 	FlagLogType         string
 	FlagLogPath         string
 	FlagAccessLogEnable bool
+
+	FlagEtcdAddr string
+	FlagEtcdNS   string
 )
 
 func init() {
@@ -29,6 +32,9 @@ func init() {
 	flag.StringVar(&FlagLogPath, "log.path", ".", "save path for log")
 	flag.StringVar(&FlagDebugLevel, "log.level", "debug", "trace | debug | info | warn | error | fatal | panic for work_log")
 	flag.BoolVar(&FlagAccessLogEnable, "access.log.enable", false, "nginx access_log")
+
+	flag.StringVar(&FlagEtcdAddr, "etcd.addr", "", "use , join addr")
+	flag.StringVar(&FlagEtcdNS, "etcd.ns", "auv", "setting etcd namespace")
 }
 
 type Config struct {

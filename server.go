@@ -13,7 +13,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-	// "unsafe"
 
 	"github.com/keepeye/logrus-filename"
 	log "github.com/sirupsen/logrus"
@@ -23,6 +22,7 @@ import (
 	"github.com/gorilla/mux"
 	_ "github.com/mkevac/debugcharts"
 
+	"github.com/qiwenilli/auv.kit/discovery"
 	"github.com/qiwenilli/auv.kit/internal"
 	auvconfig "github.com/qiwenilli/auv.kit/internal/config"
 	auvhttp "github.com/qiwenilli/auv.kit/internal/http"
@@ -94,7 +94,6 @@ func (s *server) Run(opts ...Opt) {
 		s.withSwaggerUi()
 	}
 	s.withService(serverOpt.Services...)
-	s.withSignal(serverOpt.DieHookFunc)
 
 	//
 	var middlewares []mux.MiddlewareFunc
@@ -119,6 +118,20 @@ func (s *server) Run(opts ...Opt) {
 	}
 
 	s.withAddr()
+	// add to etcd
+	if len(auvconfig.FlagEtcdAddr) > 0 {
+		etcdaddr := strings.TrimSpace(auvconfig.FlagEtcdAddr)
+		discovery.InitEtcd(auvconfig.FlagEtcdNS, etcdaddr, "", "", "")
+		hostname, _ := os.Hostname()
+		discovery.RegisterServerName(serverOpt.ServiceName, hostname+"/"+s.addr, s.addr)
+		discoveryServiceFunc := func() {
+			discovery.DestroyService(serverOpt.ServiceName, hostname+"/"+s.addr)
+		}
+		serverOpt.DieHookFuncs = append(serverOpt.DieHookFuncs, discoveryServiceFunc)
+	}
+	s.withSignal(serverOpt.DieHookFuncs)
+
+	//
 	err := s.HttpServer.ListenAndServe()
 	if err != nil {
 		log.Error(err)
@@ -155,7 +168,7 @@ func (s *server) withAddr() {
 	log.Info("listen: http://", s.addr)
 }
 
-func (s *server) withSignal(dieHookFunc func()) {
+func (s *server) withSignal(dieHookFuncs []func()) {
 	c := make(chan os.Signal, 1)
 	// signal.Notify(c, os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGPWR)
 	signal.Notify(c, os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGQUIT)
@@ -165,8 +178,10 @@ func (s *server) withSignal(dieHookFunc func()) {
 		case os.Interrupt, os.Kill, syscall.SIGTERM, syscall.SIGQUIT:
 			log.Info("exit program...")
 			signal.Stop(c)
-			if dieHookFunc != nil {
-				dieHookFunc()
+			if len(dieHookFuncs) > 0 {
+				for _, _func := range dieHookFuncs {
+					_func()
+				}
 			}
 			os.Exit(0)
 		}

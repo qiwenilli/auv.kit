@@ -10,10 +10,12 @@ import (
 var Options []Opt
 
 type Option struct {
-	ServiceName string
-	Services    []TwirpServer
-	Middlewares []mux.MiddlewareFunc
-	DieHookFunc func()
+	ServiceName  string
+	Services     []TwirpServer
+	Middlewares  []mux.MiddlewareFunc
+	DieHookFuncs []func()
+	//
+	EtcdEndpoints []string
 }
 
 type Opt func(*Option) error
@@ -38,7 +40,7 @@ func WithServices(srvs ...TwirpServer) Opt {
 
 func WithDieHookFunc(_func func()) Opt {
 	return func(opt *Option) error {
-		opt.DieHookFunc = _func
+		opt.DieHookFuncs = append(opt.DieHookFuncs, _func)
 		return nil
 	}
 }
@@ -46,6 +48,13 @@ func WithDieHookFunc(_func func()) Opt {
 func WithMiddlewares(middlewareFuncs ...mux.MiddlewareFunc) Opt {
 	return func(opt *Option) error {
 		opt.Middlewares = append(opt.Middlewares, middlewareFuncs...)
+		return nil
+	}
+}
+
+func WithEtcdEndpoints(endpoints []string) Opt {
+	return func(opt *Option) error {
+		opt.EtcdEndpoints = endpoints
 		return nil
 	}
 }
