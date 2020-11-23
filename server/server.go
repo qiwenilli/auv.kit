@@ -121,7 +121,7 @@ func (s *server) Run(opts ...Opt) {
 	// add to etcd
 	if len(auvconfig.FlagEtcdAddr) > 0 {
 		etcdaddr := strings.TrimSpace(auvconfig.FlagEtcdAddr)
-		discovery.InitEtcd(auvconfig.FlagEtcdNS, etcdaddr, "", "", "", discovery.ServiceEvent())
+		discovery.InitEtcd(auvconfig.FlagEtcdNS, etcdaddr, "", "", "", discovery.ServiceEvent(), discovery.ConfigEvent())
 		hostname, _ := os.Hostname()
 		discovery.RegisterServerName(serverOpt.ServiceName, hostname+"/"+s.addr, s.addr)
 		discoveryServiceFunc := func() {

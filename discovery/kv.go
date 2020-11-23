@@ -2,6 +2,8 @@ package discovery
 
 import (
 	"context"
+	"errors"
+	"regexp"
 	"strings"
 
 	"github.com/coreos/etcd/mvcc/mvccpb"
@@ -13,25 +15,36 @@ const (
 )
 
 var (
-	kvs = hashmap.New()
+	kvs        = hashmap.New()
+	key_reg, _ = regexp.Compile("[0-9A-Fa-f\\._-]")
 )
 
-func Put(key string, val string) error {
-	cli := NewEtcdClient()
-	return cli.Put(context.TODO(), cli.BuildKey(CONFIG_PREFIX, key), val)
+func KvPut(key string, val string) error {
+	if key_reg.MatchString(key) {
+		cli := NewEtcdClient()
+		return cli.Put(context.TODO(), cli.BuildKey(CONFIG_PREFIX, key), val)
+	} else {
+		return errors.New("key not allow")
+	}
 }
 
-func Get(key string) string {
+func KvGet(key string) string {
 	if val, ok := kvs.Get(key); ok {
 		return val.(string)
 	}
 	return ""
 }
 
+func sourceKvPut(key, val string) {
+	keySlice := strings.Split(key, "/")
+	kvs.Put(keySlice[1], val)
+}
+
 func ConfigEvent() WatchEvent {
 	return func(rootPrefix string, event mvccpb.Event_EventType, key, val string) {
-		//auv.config/serviceName
-		if strings.Contains(key, rootPrefix+"."+CONFIG_PREFIX) {
+		//auv.config/key
+		cli := NewEtcdClient()
+		if strings.HasPrefix(key, cli.BuildKey(CONFIG_PREFIX, "")) {
 			keySlice := strings.Split(key, "/")
 			if mvccpb.DELETE == event {
 				kvs.Remove(keySlice[1])

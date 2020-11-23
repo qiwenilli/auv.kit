@@ -88,7 +88,6 @@ func InitEtcd(rootPrefix string, endpoints, key, cert, ca string, events ...Watc
 				for _, ev := range wresp.Events {
 					for _, event := range events {
 						event(rootPrefix, ev.Type, string(ev.Kv.Key), string(ev.Kv.Value))
-						fmt.Println("---->", ev)
 					}
 
 					// switch ev.Type {
@@ -104,6 +103,19 @@ func InitEtcd(rootPrefix string, endpoints, key, cert, ca string, events ...Watc
 		}()
 
 		// get 初始化所有servicename config
+		if resp, err := cli.Get(context.TODO(), rootPrefix+"."+CONFIG_PREFIX, clientv3.WithPrefix()); err == nil {
+			for _, kv := range resp.Kvs {
+				sourceKvPut(string(kv.Key), string(kv.Value))
+			}
+		}
+
+		// get 初始化所有servicename config
+		if resp, err := cli.Get(context.TODO(), rootPrefix+"."+SERVICE_PREFIX, clientv3.WithPrefix()); err == nil {
+			for _, kv := range resp.Kvs {
+				sourceServicePut(string(kv.Key), string(kv.Value))
+			}
+		}
+
 	})
 }
 
