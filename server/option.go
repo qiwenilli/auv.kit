@@ -1,4 +1,4 @@
-package auv
+package server
 
 import (
 	"github.com/gorilla/mux"

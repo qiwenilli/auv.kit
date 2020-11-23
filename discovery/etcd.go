@@ -2,7 +2,7 @@ package discovery
 
 import (
 	"github.com/coreos/etcd/clientv3"
-	// "github.com/coreos/etcd/mvcc/mvccpb"
+	"github.com/coreos/etcd/mvcc/mvccpb"
 	"github.com/coreos/etcd/pkg/transport"
 
 	"context"
@@ -19,13 +19,15 @@ type etcdClient struct {
 	rootPrefix string
 }
 
+type WatchEvent func(rootPrefix string, event mvccpb.Event_EventType, key, val string)
+
 var (
 	etcdClientEntity *etcdClient
 	onceEtcd         sync.Once
 	error_disconnet  = errors.New("etcd client disconnect")
 )
 
-func InitEtcd(rootPrefix string, endpoints, key, cert, ca string) {
+func InitEtcd(rootPrefix string, endpoints, key, cert, ca string, events ...WatchEvent) {
 
 	var tlsConfig *tls.Config
 	var err error
@@ -66,23 +68,51 @@ func InitEtcd(rootPrefix string, endpoints, key, cert, ca string) {
 			for {
 				for _, ep := range config.Endpoints {
 					ctx, cancel := context.WithTimeout(context.TODO(), time.Millisecond*500)
-					resp, err := cli.Status(ctx, ep)
+					// resp, err := cli.Status(ctx, ep)
+					_, err := cli.Status(ctx, ep)
 					if err != nil {
 						fmt.Println(err)
 						cancel()
 						continue
 					}
-					fmt.Println(resp.Header.MemberId)
-					fmt.Printf("endpoint: %s / Leader: %v\n", ep, resp.Header.MemberId == resp.Leader)
+					// fmt.Println(resp.Header.MemberId)
+					// fmt.Printf("endpoint: %s / Leader: %v\n", ep, resp.Header.MemberId == resp.Leader)
 				}
 				time.Sleep(time.Second)
 			}
 		}()
+
+		go func() {
+			rch := cli.Watch(context.TODO(), rootPrefix, clientv3.WithPrefix())
+			for wresp := range rch {
+				for _, ev := range wresp.Events {
+					for _, event := range events {
+						event(rootPrefix, ev.Type, string(ev.Kv.Key), string(ev.Kv.Value))
+						fmt.Println("---->", ev)
+					}
+
+					// switch ev.Type {
+					// case mvccpb.PUT:
+					// 	// ev.Kv.Key, ev.Kv.Value
+					// case mvccpb.DELETE:
+					// 	// ev.Kv.Key, ev.Kv.Value
+
+					// }
+				}
+			}
+			//
+		}()
+
+		// get 初始化所有servicename config
 	})
 }
 
 func NewEtcdClient() *etcdClient {
 	return etcdClientEntity
+}
+
+func (e *etcdClient) GetRootPrefix() string {
+	return e.rootPrefix
 }
 
 func (e *etcdClient) BuildKey(typeName, key string) string {
