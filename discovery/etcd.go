@@ -131,11 +131,14 @@ func (e *etcdClient) BuildKey(typeName, key string) string {
 	// auv.naming/Service.Name/Service.Version/hostname
 	// auv.config/config_name
 	// type = naming | config
+	if e == nil {
+		return ""
+	}
 	return e.rootPrefix + "." + typeName + "/" + key
 }
 
 func (e *etcdClient) Get(ctx context.Context, key string) (*clientv3.GetResponse, error) {
-	if e.client == nil {
+	if e == nil {
 		return nil, error_disconnet
 	}
 	return e.get(ctx, key, false)
@@ -150,7 +153,7 @@ func (e *etcdClient) get(ctx context.Context, key string, isPrefix bool) (*clien
 }
 
 func (e *etcdClient) Put(ctx context.Context, key, val string) error {
-	if e.client == nil {
+	if e == nil {
 		return error_disconnet
 	}
 	_, err := e.client.Put(ctx, key, val)
@@ -158,7 +161,7 @@ func (e *etcdClient) Put(ctx context.Context, key, val string) error {
 }
 
 func (e *etcdClient) Del(ctx context.Context, key string) error {
-	if e.client == nil {
+	if e == nil {
 		return error_disconnet
 	}
 	_, err := e.client.Delete(ctx, key)
@@ -166,7 +169,7 @@ func (e *etcdClient) Del(ctx context.Context, key string) error {
 }
 
 func (e *etcdClient) Watch(ctx context.Context, key string, isPrefix bool) clientv3.WatchChan {
-	if e.client == nil {
+	if e == nil {
 		return nil
 	}
 	//

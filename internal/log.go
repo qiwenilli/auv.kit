@@ -17,8 +17,11 @@ func (L *LogFormatter) Format(entry *log.Entry) ([]byte, error) {
 		fieldSlice = append(fieldSlice, fmt.Sprintf("%s=%s", key, val))
 	}
 
+	f := "f=" + entry.Data["f"].(string)
+	sn := "sn=" + entry.Data["SN"].(string)
+
 	timestamp := time.Now().Local().Format("2006/01/02 15:04:05")
-	msg := fmt.Sprintf("%s [%s] %s %s\n", timestamp, strings.ToUpper(entry.Level.String()), strings.Join(fieldSlice, " "), entry.Message)
+	msg := fmt.Sprintf("%s [%s] %s %s %s\n", timestamp, strings.ToUpper(entry.Level.String()), f, sn, entry.Message)
 	return []byte(msg), nil
 }
 
