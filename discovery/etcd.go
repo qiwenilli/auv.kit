@@ -33,9 +33,12 @@ func InitEtcd(rootPrefix string, endpoints, key, cert, ca string, events ...Watc
 	var err error
 	if key != "" && cert != "" && ca != "" {
 		tlsInfo := transport.TLSInfo{
-			CertFile:      "/tmp/test-certs/test-name-1.pem",
-			KeyFile:       "/tmp/test-certs/test-name-1-key.pem",
-			TrustedCAFile: "/tmp/test-certs/trusted-ca.pem",
+			// CertFile:      "/tmp/test-certs/test-name-1.pem",
+			// KeyFile:       "/tmp/test-certs/test-name-1-key.pem",
+			// TrustedCAFile: "/tmp/test-certs/trusted-ca.pem",
+			CertFile:      cert,
+			KeyFile:       key,
+			TrustedCAFile: ca,
 		}
 		tlsConfig, err = tlsInfo.ClientConfig()
 		if err != nil {
@@ -95,7 +98,6 @@ func InitEtcd(rootPrefix string, endpoints, key, cert, ca string, events ...Watc
 					// 	// ev.Kv.Key, ev.Kv.Value
 					// case mvccpb.DELETE:
 					// 	// ev.Kv.Key, ev.Kv.Value
-
 					// }
 				}
 			}

@@ -16,6 +16,9 @@ type Option struct {
 	DieHookFuncs []func()
 	//
 	EtcdEndpoints []string
+
+	Ratelimit   int64
+	IpWhiteList []string
 }
 
 type Opt func(*Option) error
@@ -55,6 +58,20 @@ func WithMiddlewares(middlewareFuncs ...mux.MiddlewareFunc) Opt {
 func WithEtcdEndpoints(endpoints []string) Opt {
 	return func(opt *Option) error {
 		opt.EtcdEndpoints = endpoints
+		return nil
+	}
+}
+
+func WithRatelimit(limit int64) Opt {
+	return func(opt *Option) error {
+		opt.Ratelimit = limit
+		return nil
+	}
+}
+
+func WithIpWhiteList(list []string) Opt {
+	return func(opt *Option) error {
+		opt.IpWhiteList = list
 		return nil
 	}
 }

@@ -114,8 +114,9 @@ func (l *limiter) inWhiteList(visitorIp string) bool {
 func (l *limiter) MiddlewareRlimit(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		visitorIp := utils.RemoteIP(r)
-		if l.inWhiteList(visitorIp) {
-			log.Infof("visitorIp=%s in white list", visitorIp)
+		// 白名单或是rlimit==0
+		if l.inWhiteList(visitorIp) || l.everySecondQps == 0 {
+			log.Debugf("visitorIp=%v in white list", visitorIp)
 			h.ServeHTTP(w, r)
 			return
 		}

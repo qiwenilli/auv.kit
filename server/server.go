@@ -99,8 +99,8 @@ func (s *server) Run(opts ...Opt) {
 	var middlewares []mux.MiddlewareFunc
 	middlewares = append(middlewares, auvhttp.MiddlewareResponseTime)
 	middlewares = append(middlewares, auvhttp.MiddlewareTraceId)
-	ratelimit := auvhttp.NewMiddlewareRlimit(2)
-	ratelimit.SetIpWhiteList([]string{"192.168.*.*"})
+	ratelimit := auvhttp.NewMiddlewareRlimit(serverOpt.Ratelimit)
+	ratelimit.SetIpWhiteList(serverOpt.IpWhiteList)
 	middlewares = append(middlewares, ratelimit.MiddlewareRlimit)
 	if auvconfig.FlagAllowCrossDomain {
 		middlewares = append(middlewares, auvhttp.MiddlewareForCrossDomain)
@@ -238,3 +238,9 @@ func (s *server) WithHandleFunc(path string, f func(http.ResponseWriter, *http.R
 	s.mux.HandleFunc(path, f)
 	return s
 }
+
+// func (s *server) WithHandleFunc(path string, f func(http.ResponseWriter, *http.Request)) *server {
+// 	s.pathRules = append(s.pathRules, path)
+// 	s.mux.HandleFunc(path, f)
+// 	return s
+// }
