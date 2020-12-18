@@ -143,7 +143,7 @@ func (s *server) withService(srvs ...TwirpServer) *server {
 		if srv == nil {
 			continue
 		}
-		s.WithHandle(srv.PathPrefix(), srv)
+		s.WithPrefixHandle(srv.PathPrefix(), srv)
 		//
 		typ := reflect.TypeOf(srv)
 		for i := 0; i < typ.NumMethod(); i++ {
@@ -230,6 +230,14 @@ func (s *server) withSwaggerUi() {
 func (s *server) WithHandle(path string, handler http.Handler) *server {
 	s.pathRules = append(s.pathRules, path)
 	s.mux.Handle(path, handler)
+	return s
+}
+
+func (s *server) WithPrefixHandle(path string, handler http.Handler) *server {
+
+	debugRouter := s.mux.PathPrefix(path)
+	debugRouter.Handler(handler)
+
 	return s
 }
 
