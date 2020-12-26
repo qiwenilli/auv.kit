@@ -9,7 +9,7 @@ require (
 	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
 	github.com/emirpasic/gods v1.12.0
 	github.com/fastly/go-utils v0.0.0-20180712184237-d95a45783239 // indirect
-	github.com/gogo/protobuf v1.3.1 // indirect
+	github.com/gogf/gf v1.14.6
 	github.com/google/uuid v1.1.2
 	github.com/gorilla/mux v1.8.0
 	github.com/jehiah/go-strftime v0.0.0-20171201141054-1d33003b3869 // indirect
@@ -26,4 +26,7 @@ require (
 	github.com/ulule/limiter/v3 v3.7.1
 	go.uber.org/zap v1.16.0 // indirect
 	google.golang.org/grpc v1.27.0
+	google.golang.org/protobuf v1.23.1-0.20200526195155-81db48ad09cc
 )
+
+replace google.golang.org/protobuf => github.com/protocolbuffers/protobuf-go v1.25.0
