@@ -1,7 +1,7 @@
 package utils
 
 import (
-	"errors"
+	// "errors"
 	"reflect"
 
 	"github.com/gogf/gf/util/gconv"
@@ -10,6 +10,7 @@ import (
 	"github.com/twitchtv/twirp"
 )
 
+// 会把嵌套struct平铺成一维
 func ToProtobufStruct(data interface{}, time2str bool) (*structpb.Struct, error) {
 	//
 	dataMap := make(map[string]interface{})
@@ -33,14 +34,15 @@ func ToProtobufStruct(data interface{}, time2str bool) (*structpb.Struct, error)
 
 			}
 
-		} else if val.Kind().String() == "struct" {
-			return nil, errors.New("element is struct")
-
+		} else if val.Kind() == reflect.Struct {
+			elemStruct, _ := ToProtobufStruct(val.Interface(), false)
+			for key, inf := range elemStruct.Fields {
+				dataMap[key] = inf.AsInterface()
+			}
 		} else {
 			dataMap[typ.Name] = val.Interface()
 
 		}
-
 	}
 	return structpb.NewStruct(dataMap)
 
