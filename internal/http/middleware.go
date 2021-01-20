@@ -37,9 +37,12 @@ func MiddlewareForCrossDomain(h http.Handler) http.Handler {
 			w.Header().Add("Access-Control-Allow-Origin", "*")
 		}
 		w.Header().Add("Access-Control-Allow-Credentials", "true")
-		w.Header().Add("Access-Control-Allow-Headers", "X-Auv-Cors")
+		w.Header().Add("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
 		w.Header().Add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		//
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+		}
 		h.ServeHTTP(w, r)
 	})
 }
