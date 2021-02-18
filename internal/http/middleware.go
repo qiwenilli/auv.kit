@@ -24,28 +24,29 @@ func MiddlewareResponseTime(h http.Handler) http.Handler {
 	})
 }
 
-func MiddlewareForCrossDomain(h http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+//func MiddlewareForCrossDomain(h http.Handler) http.Handler {
+//	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
-		log.Debug(r.Header["Origin"])
-		if origin, ok := r.Header["Origin"]; ok {
-			referer_host := origin[0]
+//		log.Debug(r.Header["Origin"])
+//		if origin, ok := r.Header["Origin"]; ok {
+//			referer_host := origin[0]
 
-			w.Header().Add("Access-Control-Allow-Origin", referer_host)
-			w.Header().Add("Very", "Origin")
-		} else {
-			w.Header().Add("Access-Control-Allow-Origin", "*")
-		}
-		w.Header().Add("Access-Control-Allow-Credentials", "true")
-		w.Header().Add("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
-		w.Header().Add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		//
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-		}
-		h.ServeHTTP(w, r)
-	})
-}
+//			w.Header().Add("Access-Control-Allow-Origin", referer_host)
+//			w.Header().Add("Very", "Origin")
+//		} else {
+//			w.Header().Add("Access-Control-Allow-Origin", "*")
+//		}
+//		w.Header().Add("Access-Control-Allow-Credentials", "true")
+//		w.Header().Add("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
+//		w.Header().Add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+//		//
+//		if r.Method == "OPTIONS" {
+//			w.WriteHeader(http.StatusOK)
+//			return
+//		}
+//		h.ServeHTTP(w, r)
+//	})
+//}
 
 func MiddlewareTraceId(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

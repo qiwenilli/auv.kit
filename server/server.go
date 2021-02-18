@@ -21,6 +21,7 @@ import (
 	// "github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	_ "github.com/mkevac/debugcharts"
+	"github.com/rs/cors"
 
 	"github.com/qiwenilli/auv.kit/discovery"
 	"github.com/qiwenilli/auv.kit/internal"
@@ -103,7 +104,7 @@ func (s *server) Run(opts ...Opt) {
 	ratelimit.SetIpWhiteList(serverOpt.IpWhiteList)
 	middlewares = append(middlewares, ratelimit.MiddlewareRlimit)
 	if auvconfig.FlagAllowCrossDomain {
-		middlewares = append(middlewares, auvhttp.MiddlewareForCrossDomain)
+		// middlewares = append(middlewares, auvhttp.MiddlewareForCrossDomain)
 	}
 	middlewares = append(middlewares, serverOpt.Middlewares...)
 	s.mux.Use(middlewares...)
@@ -112,6 +113,18 @@ func (s *server) Run(opts ...Opt) {
 	// handlers.CompressHandler(http.DefaultServeMux)
 
 	s.handler = s.mux
+	if auvconfig.FlagAllowCrossDomain {
+		// middlewares = append(middlewares, auvhttp.MiddlewareForCrossDomain)
+		c := cors.New(cors.Options{
+			AllowedOrigins:   []string{"http://*", "https://*"},
+			AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodDelete},
+			AllowCredentials: true,
+			// Enable Debugging for testing, consider disabling in production
+			Debug: false,
+		})
+		s.handler = c.Handler(s.mux)
+	}
+
 	s.HttpServer.Handler = s.handler
 	for _, path := range s.pathRules {
 		log.Info(path)
@@ -233,6 +246,12 @@ func (s *server) WithHandle(path string, handler http.Handler) *server {
 	return s
 }
 
+func (s *server) WithHandleFunc(path string, f func(http.ResponseWriter, *http.Request)) *server {
+	s.pathRules = append(s.pathRules, path)
+	s.mux.HandleFunc(path, f)
+	return s
+}
+
 func (s *server) WithPrefixHandle(path string, handler http.Handler) *server {
 
 	debugRouter := s.mux.PathPrefix(path)
@@ -241,14 +260,18 @@ func (s *server) WithPrefixHandle(path string, handler http.Handler) *server {
 	return s
 }
 
-func (s *server) WithHandleFunc(path string, f func(http.ResponseWriter, *http.Request)) *server {
-	s.pathRules = append(s.pathRules, path)
-	s.mux.HandleFunc(path, f)
+func (s *server) WithPrefixHandlerFunc(path string, f func(http.ResponseWriter, *http.Request)) *server {
+
+	debugRouter := s.mux.PathPrefix(path)
+	debugRouter.HandlerFunc(f)
+
 	return s
 }
 
-// func (s *server) WithHandleFunc(path string, f func(http.ResponseWriter, *http.Request)) *server {
-// 	s.pathRules = append(s.pathRules, path)
-// 	s.mux.HandleFunc(path, f)
-// 	return s
-// }
+func (s *server) WithPrefixHandlerFuncForGet(path string, f func(http.ResponseWriter, *http.Request)) *server {
+
+	debugRouter := s.mux.PathPrefix(path).Methods(http.MethodGet)
+	debugRouter.HandlerFunc(f)
+
+	return s
+}
